@@ -1,0 +1,420 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  GCP_REGION: us-central1
+  SERVICE_NAME_BACKEND: travel-planner-api
+  SERVICE_NAME_FRONTEND: travel-planner-web
+
+jobs:
+  # Code Quality and Testing
+  quality-check:
+    name: Code Quality & Testing
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+        cache-dependency-path: |
+          backend/package-lock.json
+          frontend/package-lock.json
+    
+    - name: Install backend dependencies
+      run: |
+        cd backend
+        npm ci
+    
+    - name: Install frontend dependencies
+      run: |
+        cd frontend
+        npm ci
+    
+    - name: Lint backend code
+      run: |
+        cd backend
+        npm run lint
+    
+    - name: Lint frontend code
+      run: |
+        cd frontend
+        npm run lint
+    
+    - name: Type check backend
+      run: |
+        cd backend
+        npm run type-check
+    
+    - name: Type check frontend
+      run: |
+        cd frontend
+        npm run type-check
+    
+    - name: Run backend tests
+      run: |
+        cd backend
+        npm run test:coverage
+      env:
+        NODE_ENV: test
+    
+    - name: Run frontend tests
+      run: |
+        cd frontend
+        npm run test:coverage
+    
+    - name: Upload backend coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        directory: ./backend/coverage
+        flags: backend
+        name: backend-coverage
+    
+    - name: Upload frontend coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        directory: ./frontend/coverage
+        flags: frontend
+        name: frontend-coverage
+
+  # Security Scanning
+  security-scan:
+    name: Security Scanning
+    runs-on: ubuntu-latest
+    needs: quality-check
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+    
+    - name: Upload Trivy scan results to GitHub Security tab
+      uses: github/codeql-action/upload-sarif@v2
+      if: always()
+      with:
+        sarif_file: 'trivy-results.sarif'
+    
+    - name: Audit backend dependencies
+      run: |
+        cd backend
+        npm audit --audit-level high
+    
+    - name: Audit frontend dependencies
+      run: |
+        cd frontend
+        npm audit --audit-level high
+
+  # Build Docker Images
+  build:
+    name: Build Docker Images
+    runs-on: ubuntu-latest
+    needs: [quality-check, security-scan]
+    if: github.event_name == 'push'
+    
+    outputs:
+      backend-image-digest: ${{ steps.backend-build.outputs.digest }}
+      frontend-image-digest: ${{ steps.frontend-build.outputs.digest }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Authenticate to Google Cloud
+      uses: google-github-actions/auth@v2
+      with:
+        credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
+    
+    - name: Configure Docker to use gcloud as credential helper
+      run: gcloud auth configure-docker
+    
+    - name: Build and push backend image
+      id: backend-build
+      uses: docker/build-push-action@v5
+      with:
+        context: ./backend
+        file: ./backend/Dockerfile
+        push: true
+        tags: |
+          gcr.io/${{ env.GCP_PROJECT_ID }}/${{ env.SERVICE_NAME_BACKEND }}:${{ github.sha }}
+          gcr.io/${{ env.GCP_PROJECT_ID }}/${{ env.SERVICE_NAME_BACKEND }}:latest
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        platforms: linux/amd64
+    
+    - name: Build and push frontend image
+      id: frontend-build
+      uses: docker/build-push-action@v5
+      with:
+        context: ./frontend
+        file: ./frontend/Dockerfile
+        push: true
+        tags: |
+          gcr.io/${{ env.GCP_PROJECT_ID }}/${{ env.SERVICE_NAME_FRONTEND }}:${{ github.sha }}
+          gcr.io/${{ env.GCP_PROJECT_ID }}/${{ env.SERVICE_NAME_FRONTEND }}:latest
+        build-args: |
+          VITE_API_BASE_URL=${{ secrets.VITE_API_BASE_URL }}
+          VITE_FIREBASE_API_KEY=${{ secrets.VITE_FIREBASE_API_KEY }}
+          VITE_FIREBASE_AUTH_DOMAIN=${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
+          VITE_FIREBASE_PROJECT_ID=${{ secrets.VITE_FIREBASE_PROJECT_ID }}
+          VITE_GOOGLE_MAPS_API_KEY=${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        platforms: linux/amd64
+
+  # Deploy to Staging
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/develop'
+    environment: staging
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Authenticate to Google Cloud
+      uses: google-github-actions/auth@v2
+      with:
+        credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
+    
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
+    
+    - name: Deploy backend to Cloud Run (Staging)
+      run: |
+        gcloud run deploy ${{ env.SERVICE_NAME_BACKEND }}-staging \
+          --image=gcr.io/${{ env.GCP_PROJECT_ID }}/${{ env.SERVICE_NAME_BACKEND }}:${{ github.sha }} \
+          --platform=managed \
+          --region=${{ env.GCP_REGION }} \
+          --allow-unauthenticated \
+          --port=8080 \
+          --memory=2Gi \
+          --cpu=2 \
+          --min-instances=0 \
+          --max-instances=5 \
+          --concurrency=80 \
+          --timeout=300 \
+          --set-env-vars="NODE_ENV=staging,PORT=8080" \
+          --set-secrets="ANTHROPIC_API_KEY=anthropic-api-key-staging:latest,AMADEUS_CLIENT_ID=amadeus-client-id-staging:latest,AMADEUS_CLIENT_SECRET=amadeus-client-secret-staging:latest,JWT_SECRET=jwt-secret-staging:latest" \
+          --service-account="travel-planner-backend-staging@${{ env.GCP_PROJECT_ID }}.iam.gserviceaccount.com" \
+          --labels="app=travel-planner,component=backend,environment=staging"
+    
+    - name: Deploy frontend to Cloud Run (Staging)
+      run: |
+        gcloud run deploy ${{ env.SERVICE_NAME_FRONTEND }}-staging \
+          --image=gcr.io/${{ env.GCP_PROJECT_ID }}/${{ env.SERVICE_NAME_FRONTEND }}:${{ github.sha }} \
+          --platform=managed \
+          --region=${{ env.GCP_REGION }} \
+          --allow-unauthenticated \
+          --port=80 \
+          --memory=512Mi \
+          --cpu=1 \
+          --min-instances=0 \
+          --max-instances=3 \
+          --concurrency=100 \
+          --timeout=60 \
+          --labels="app=travel-planner,component=frontend,environment=staging"
+    
+    - name: Run smoke tests on staging
+      run: |
+        BACKEND_URL=$(gcloud run services describe ${{ env.SERVICE_NAME_BACKEND }}-staging --region=${{ env.GCP_REGION }} --format="value(status.url)")
+        FRONTEND_URL=$(gcloud run services describe ${{ env.SERVICE_NAME_FRONTEND }}-staging --region=${{ env.GCP_REGION }} --format="value(status.url)")
+        
+        # Test backend health
+        curl -f "$BACKEND_URL/health" || exit 1
+        
+        # Test frontend
+        curl -f "$FRONTEND_URL/health" || exit 1
+        
+        echo "Staging deployment successful!"
+        echo "Frontend URL: $FRONTEND_URL"
+        echo "Backend URL: $BACKEND_URL"
+
+  # Deploy to Production
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    environment: production
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Authenticate to Google Cloud
+      uses: google-github-actions/auth@v2
+      with:
+        credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
+    
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
+    
+    - name: Deploy backend to Cloud Run (Production)
+      run: |
+        gcloud run deploy ${{ env.SERVICE_NAME_BACKEND }} \
+          --image=gcr.io/${{ env.GCP_PROJECT_ID }}/${{ env.SERVICE_NAME_BACKEND }}:${{ github.sha }} \
+          --platform=managed \
+          --region=${{ env.GCP_REGION }} \
+          --allow-unauthenticated \
+          --port=8080 \
+          --memory=2Gi \
+          --cpu=2 \
+          --min-instances=1 \
+          --max-instances=10 \
+          --concurrency=80 \
+          --timeout=300 \
+          --set-env-vars="NODE_ENV=production,PORT=8080" \
+          --set-secrets="ANTHROPIC_API_KEY=anthropic-api-key:latest,AMADEUS_CLIENT_ID=amadeus-client-id:latest,AMADEUS_CLIENT_SECRET=amadeus-client-secret:latest,JWT_SECRET=jwt-secret:latest,SENDGRID_API_KEY=sendgrid-api-key:latest,FIRESTORE_CREDENTIALS=firebase-service-account:latest" \
+          --service-account="travel-planner-backend@${{ env.GCP_PROJECT_ID }}.iam.gserviceaccount.com" \
+          --labels="app=travel-planner,component=backend,environment=production"
+    
+    - name: Deploy frontend to Cloud Run (Production)
+      run: |
+        gcloud run deploy ${{ env.SERVICE_NAME_FRONTEND }} \
+          --image=gcr.io/${{ env.GCP_PROJECT_ID }}/${{ env.SERVICE_NAME_FRONTEND }}:${{ github.sha }} \
+          --platform=managed \
+          --region=${{ env.GCP_REGION }} \
+          --allow-unauthenticated \
+          --port=80 \
+          --memory=512Mi \
+          --cpu=1 \
+          --min-instances=1 \
+          --max-instances=5 \
+          --concurrency=100 \
+          --timeout=60 \
+          --labels="app=travel-planner,component=frontend,environment=production"
+    
+    - name: Run production smoke tests
+      run: |
+        BACKEND_URL=$(gcloud run services describe ${{ env.SERVICE_NAME_BACKEND }} --region=${{ env.GCP_REGION }} --format="value(status.url)")
+        FRONTEND_URL=$(gcloud run services describe ${{ env.SERVICE_NAME_FRONTEND }} --region=${{ env.GCP_REGION }} --format="value(status.url)")
+        
+        # Test backend health
+        curl -f "$BACKEND_URL/health" || exit 1
+        
+        # Test frontend
+        curl -f "$FRONTEND_URL/health" || exit 1
+        
+        echo "Production deployment successful!"
+        echo "Frontend URL: $FRONTEND_URL"
+        echo "Backend URL: $BACKEND_URL"
+    
+    - name: Create GitHub deployment
+      uses: chrnorm/deployment-action@v2
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        environment: production
+        description: "Production deployment of commit ${{ github.sha }}"
+    
+    - name: Notify Slack (Success)
+      if: success()
+      uses: 8398a7/action-slack@v3
+      with:
+        status: success
+        channel: '#deployments'
+        text: '🚀 Production deployment successful!'
+        webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+    
+    - name: Notify Slack (Failure)
+      if: failure()
+      uses: 8398a7/action-slack@v3
+      with:
+        status: failure
+        channel: '#deployments'
+        text: '❌ Production deployment failed!'
+        webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+
+  # Performance Testing
+  performance-test:
+    name: Performance Testing
+    runs-on: ubuntu-latest
+    needs: deploy-staging
+    if: github.ref == 'refs/heads/develop'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+    
+    - name: Install Lighthouse CI
+      run: npm install -g @lhci/cli@0.12.x
+    
+    - name: Get staging URL
+      run: |
+        FRONTEND_URL=$(gcloud run services describe ${{ env.SERVICE_NAME_FRONTEND }}-staging --region=${{ env.GCP_REGION }} --format="value(status.url)")
+        echo "STAGING_URL=$FRONTEND_URL" >> $GITHUB_ENV
+    
+    - name: Run Lighthouse CI
+      run: |
+        lhci autorun --upload.target=temporary-public-storage --collect.url=${{ env.STAGING_URL }}
+    
+    - name: Upload Lighthouse results
+      uses: actions/upload-artifact@v3
+      with:
+        name: lighthouse-results
+        path: .lighthouseci
+
+  # Database Migration (if needed)
+  migrate-database:
+    name: Database Migration
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    environment: production
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Authenticate to Google Cloud
+      uses: google-github-actions/auth@v2
+      with:
+        credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+    
+    - name: Install dependencies
+      run: |
+        cd backend
+        npm ci
+    
+    - name: Run database migrations
+      run: |
+        cd backend
+        npm run db:migrate
+      env:
+        FIRESTORE_PROJECT_ID: ${{ secrets.FIRESTORE_PROJECT_ID }}
+        GOOGLE_APPLICATION_CREDENTIALS: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}

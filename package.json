@@ -1,0 +1,56 @@
+{
+  "name": "travel-itinerary-planner",
+  "version": "1.0.0",
+  "description": "AI-powered travel itinerary planner with real-time flight and hotel data",
+  "private": true,
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:backend": "cd backend && npm run dev",
+    "build": "npm run build:frontend && npm run build:backend",
+    "build:frontend": "cd frontend && npm run build",
+    "build:backend": "cd backend && npm run build",
+    "test": "npm run test:frontend && npm run test:backend",
+    "test:frontend": "cd frontend && npm run test",
+    "test:backend": "cd backend && npm run test",
+    "lint": "npm run lint:frontend && npm run lint:backend",
+    "lint:frontend": "cd frontend && npm run lint",
+    "lint:backend": "cd backend && npm run lint",
+    "deploy": "npm run build && npm run deploy:gcp",
+    "deploy:gcp": "cd deployment/gcp && ./deploy.sh",
+    "clean": "rm -rf node_modules frontend/node_modules backend/node_modules frontend/dist backend/dist",
+    "setup": "npm install && npm run setup:frontend && npm run setup:backend",
+    "setup:frontend": "cd frontend && npm install",
+    "setup:backend": "cd backend && npm install"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "@types/node": "^20.10.0",
+    "typescript": "^5.3.0"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/travel-itinerary-planner.git"
+  },
+  "keywords": [
+    "travel",
+    "itinerary",
+    "ai",
+    "claude",
+    "amadeus",
+    "react",
+    "nodejs",
+    "typescript",
+    "gcp"
+  ],
+  "author": "Your Name <your.email@example.com>",
+  "license": "MIT"
+}

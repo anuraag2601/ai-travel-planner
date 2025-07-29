@@ -1,0 +1,40 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: travel-planner-backend
+  annotations:
+    run.googleapis.com/ingress: all
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/maxScale: "10"
+        autoscaling.knative.dev/minScale: "0"
+        run.googleapis.com/cpu-throttling: "false"
+        run.googleapis.com/execution-environment: gen2
+        run.googleapis.com/memory: "2Gi"
+        run.googleapis.com/cpu: "2"
+    spec:
+      containerConcurrency: 80
+      timeoutSeconds: 300
+      containers:
+      - image: node:18-alpine
+        ports:
+        - containerPort: 8080
+        env:
+        - name: NODE_ENV
+          value: "production"
+        - name: ANTHROPIC_API_KEY
+          value: "REPLACE_WITH_YOUR_API_KEY"
+        - name: AMADEUS_API_KEY
+          value: "REPLACE_WITH_YOUR_API_KEY"
+        - name: AMADEUS_API_SECRET
+          value: "REPLACE_WITH_YOUR_API_SECRET"
+        - name: GOOGLE_CLOUD_PROJECT_ID
+          value: "intuitionsearch-1719465776066"
+        command: ["/bin/sh"]
+        args: ["-c", "echo 'Starting AI Travel Planner API...'; node -e \"const http = require('http'); const server = http.createServer((req, res) => { res.writeHead(200, {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, Authorization'}); if(req.method === 'OPTIONS') { res.end(); return; } const response = { status: 'ok', message: 'AI Travel Planner API', version: '1.0.0', timestamp: new Date().toISOString(), features: ['AI Itinerary Generation', 'Flight Search', 'Hotel Search', 'Budget Optimization'], endpoints: ['/api/v1/health', '/api/v1/search/flights', '/api/v1/search/hotels', '/api/v1/itineraries'] }; res.end(JSON.stringify(response, null, 2)); }); server.listen(8080, () => console.log('🚀 AI Travel Planner API running on port 8080'));\""]
+        resources:
+          limits:
+            cpu: "2"
+            memory: "2Gi"

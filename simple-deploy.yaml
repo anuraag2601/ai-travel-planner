@@ -1,0 +1,72 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: travel-planner-backend
+  annotations:
+    run.googleapis.com/ingress: all
+    run.googleapis.com/execution-environment: gen2
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/maxScale: "10"
+        autoscaling.knative.dev/minScale: "0"
+        run.googleapis.com/cpu-throttling: "false"
+        run.googleapis.com/execution-environment: gen2
+        run.googleapis.com/memory: "2Gi"
+        run.googleapis.com/cpu: "2"
+    spec:
+      containerConcurrency: 80
+      timeoutSeconds: 300
+      containers:
+      - image: node:18-alpine
+        ports:
+        - containerPort: 8080
+        env:
+        - name: NODE_ENV
+          value: "production"
+        - name: PORT
+          value: "8080"
+        - name: ANTHROPIC_API_KEY
+          value: "REPLACE_WITH_YOUR_API_KEY"
+        - name: AMADEUS_API_KEY
+          value: "REPLACE_WITH_YOUR_API_KEY"
+        - name: AMADEUS_API_SECRET
+          value: "REPLACE_WITH_YOUR_API_SECRET"
+        - name: GOOGLE_CLOUD_PROJECT_ID
+          value: "intuitionsearch-1719465776066"
+        command: ["/bin/sh"]
+        args: ["-c", "echo 'Simple Node.js server'; node -e \"const http = require('http'); const server = http.createServer((req, res) => { res.writeHead(200, {'Content-Type': 'application/json'}); res.end(JSON.stringify({status: 'ok', message: 'AI Travel Planner API', version: '1.0.0'})); }); server.listen(8080, () => console.log('Server running on port 8080'));\""]
+        resources:
+          limits:
+            cpu: "2"
+            memory: "2Gi"
+---
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: travel-planner-frontend
+  annotations:
+    run.googleapis.com/ingress: all
+    run.googleapis.com/execution-environment: gen2
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/maxScale: "5"
+        autoscaling.knative.dev/minScale: "0"
+        run.googleapis.com/memory: "512Mi"
+        run.googleapis.com/cpu: "1"
+    spec:
+      containerConcurrency: 100
+      timeoutSeconds: 60
+      containers:
+      - image: nginx:alpine
+        ports:
+        - containerPort: 80
+        command: ["/bin/sh"]
+        args: ["-c", "echo '<html><head><title>AI Travel Planner</title><style>body{font-family:Arial,sans-serif;margin:0;padding:20px;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:white;text-align:center;min-height:100vh;display:flex;flex-direction:column;justify-content:center;}</style></head><body><h1>🌍 AI Travel Planner</h1><p>Your intelligent travel companion powered by AI</p><h2>✨ Features</h2><ul style=\"text-align:left;display:inline-block;\"><li>🤖 AI-powered itinerary generation</li><li>✈️ Live flight search</li><li>🏨 Real-time hotel booking</li><li>💰 Budget optimization</li><li>📱 Mobile-friendly design</li></ul><p><strong>Status:</strong> Deployment in progress...</p><p>API Backend: <a href=\"https://travel-planner-backend-dot-intuitionsearch-1719465776066.uc.r.appspot.com\" style=\"color:yellow;\">Backend Service</a></p></body></html>' > /usr/share/nginx/html/index.html && nginx -g 'daemon off;'"]
+        resources:
+          limits:
+            cpu: "1"
+            memory: "512Mi"

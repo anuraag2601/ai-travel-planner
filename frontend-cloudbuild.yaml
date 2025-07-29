@@ -1,0 +1,30 @@
+steps:
+- name: 'gcr.io/cloud-builders/docker'
+  args:
+  - 'build'
+  - '-f'
+  - 'frontend-simple.Dockerfile'
+  - '-t'
+  - 'gcr.io/intuitionsearch-1719465776066/ai-travel-frontend:latest'
+  - '.'
+- name: 'gcr.io/cloud-builders/docker'
+  args:
+  - 'push'
+  - 'gcr.io/intuitionsearch-1719465776066/ai-travel-frontend:latest'
+- name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+  entrypoint: 'gcloud'
+  args:
+  - 'run'
+  - 'deploy'
+  - 'ai-travel-frontend'
+  - '--image=gcr.io/intuitionsearch-1719465776066/ai-travel-frontend:latest'
+  - '--region=us-central1'
+  - '--platform=managed'
+  - '--allow-unauthenticated'
+  - '--port=80'
+  - '--memory=256Mi'
+  - '--cpu=1'
+  - '--max-instances=5'
+
+images:
+- 'gcr.io/intuitionsearch-1719465776066/ai-travel-frontend:latest'

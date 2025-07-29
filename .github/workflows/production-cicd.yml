@@ -1,0 +1,611 @@
+name: Production CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  GCP_REGION: us-central1
+  SERVICE_NAME_BACKEND: travel-planner-api
+  SERVICE_NAME_FRONTEND: travel-planner-web
+  ARTIFACT_REGISTRY: us-central1-docker.pkg.dev
+
+jobs:
+  # Quality Gates - Phase 1
+  code-quality:
+    name: Code Quality Analysis
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Full history for SonarCloud
+      
+    - name: Setup Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+        cache-dependency-path: |
+          backend/package-lock.json
+          frontend/package-lock.json
+    
+    - name: Install dependencies
+      run: |
+        cd backend && npm ci
+        cd ../frontend && npm ci
+    
+    - name: ESLint Analysis
+      run: |
+        cd backend && npm run lint:ci
+        cd ../frontend && npm run lint:ci
+    
+    - name: TypeScript Type Checking
+      run: |
+        cd backend && npm run type-check
+        cd ../frontend && npm run type-check
+    
+    - name: Code Complexity Analysis
+      run: |
+        npx complexity-report backend/src --format json --output backend-complexity.json
+        npx complexity-report frontend/src --format json --output frontend-complexity.json
+    
+    - name: Run Unit Tests with Coverage
+      run: |
+        cd backend && npm run test:coverage:ci
+        cd ../frontend && npm run test:coverage:ci
+    
+    - name: Upload Coverage Reports
+      uses: codecov/codecov-action@v3
+      with:
+        directory: ./
+        flags: unittests
+        name: codecov-umbrella
+        fail_ci_if_error: false
+    
+    - name: SonarCloud Scan
+      uses: SonarSource/sonarcloud-github-action@master
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+  # Security & Vulnerability Scanning - Phase 2
+  security-scanning:
+    name: Advanced Security Scanning
+    runs-on: ubuntu-latest
+    needs: code-quality
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+    
+    # Dependency vulnerability scanning
+    - name: Install Snyk CLI
+      run: npm install -g snyk
+    
+    - name: Snyk Security Scan
+      run: |
+        cd backend && snyk test --severity-threshold=high --json > ../snyk-backend.json || true
+        cd ../frontend && snyk test --severity-threshold=high --json > ../snyk-frontend.json || true
+      env:
+        SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+    
+    # Container security scanning
+    - name: Build Docker images for scanning
+      run: |
+        docker build -t backend-scan ./backend
+        docker build -t frontend-scan ./frontend
+    
+    - name: Run Trivy Container Scan
+      uses: aquasecurity/trivy-action@master
+      with:
+        image-ref: 'backend-scan'
+        format: 'sarif'
+        output: 'backend-trivy.sarif'
+    
+    - name: Run Trivy Frontend Scan
+      uses: aquasecurity/trivy-action@master
+      with:
+        image-ref: 'frontend-scan'
+        format: 'sarif'
+        output: 'frontend-trivy.sarif'
+    
+    # SAST (Static Application Security Testing)
+    - name: CodeQL Analysis
+      uses: github/codeql-action/init@v2
+      with:
+        languages: javascript,typescript
+    
+    - name: CodeQL Autobuild
+      uses: github/codeql-action/autobuild@v2
+    
+    - name: CodeQL Analysis
+      uses: github/codeql-action/analyze@v2
+    
+    # Upload security results
+    - name: Upload Trivy results
+      uses: github/codeql-action/upload-sarif@v2
+      if: always()
+      with:
+        sarif_file: backend-trivy.sarif
+    
+    - name: Upload security artifacts
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: security-reports
+        path: |
+          snyk-*.json
+          *-trivy.sarif
+
+  # Integration Testing - Phase 3
+  integration-testing:
+    name: Integration & E2E Testing
+    runs-on: ubuntu-latest
+    needs: [code-quality, security-scanning]
+    
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: |
+        cd backend && npm ci
+        cd ../frontend && npm ci
+    
+    - name: Setup test environment
+      run: |
+        # Create test Firebase project setup
+        echo '${{ secrets.FIREBASE_TEST_CONFIG }}' > backend/config/firebase-test.json
+    
+    - name: Run Backend Integration Tests
+      run: |
+        cd backend
+        npm run test:integration
+      env:
+        NODE_ENV: test
+        REDIS_URL: redis://localhost:6379
+        FIRESTORE_EMULATOR_HOST: localhost:8080
+        
+    - name: Start Backend for E2E Tests
+      run: |
+        cd backend
+        npm run start:test &
+        sleep 30
+      env:
+        NODE_ENV: test
+        PORT: 8080
+    
+    - name: Build Frontend for E2E
+      run: |
+        cd frontend
+        npm run build:test
+        npm run preview &
+        sleep 15
+      env:
+        VITE_API_BASE_URL: http://localhost:8080/api/v1
+    
+    - name: Run E2E Tests with Playwright
+      run: |
+        cd frontend
+        npx playwright test
+      env:
+        CI: true
+    
+    - name: Upload E2E Test Results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: e2e-results
+        path: |
+          frontend/test-results/
+          frontend/playwright-report/
+
+  # Performance & Load Testing - Phase 4
+  performance-testing:
+    name: Performance Testing
+    runs-on: ubuntu-latest
+    needs: integration-testing
+    if: github.event_name == 'push'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+    
+    - name: Install k6
+      run: |
+        sudo gpg -k
+        sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+        echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+        sudo apt-get update
+        sudo apt-get install k6
+    
+    - name: Run Load Tests
+      run: |
+        k6 run --out json=load-test-results.json scripts/load-tests/api-load-test.js
+    
+    - name: Upload Performance Results
+      uses: actions/upload-artifact@v3
+      with:
+        name: performance-results
+        path: load-test-results.json
+
+  # Build & Package - Phase 5
+  build-and-package:
+    name: Build & Package Images
+    runs-on: ubuntu-latest
+    needs: [code-quality, security-scanning, integration-testing]
+    if: github.event_name == 'push'
+    
+    outputs:
+      backend-image: ${{ steps.meta-backend.outputs.tags }}
+      backend-digest: ${{ steps.build-backend.outputs.digest }}
+      frontend-image: ${{ steps.meta-frontend.outputs.tags }}
+      frontend-digest: ${{ steps.build-frontend.outputs.digest }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Authenticate to Google Cloud
+      uses: google-github-actions/auth@v2
+      with:
+        credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
+    
+    - name: Configure Docker for Artifact Registry
+      run: gcloud auth configure-docker ${{ env.ARTIFACT_REGISTRY }}
+    
+    - name: Extract Backend Metadata
+      id: meta-backend
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.ARTIFACT_REGISTRY }}/${{ env.GCP_PROJECT_ID }}/travel-planner/${{ env.SERVICE_NAME_BACKEND }}
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=sha,prefix={{branch}}-
+          type=raw,value=latest,enable={{is_default_branch}}
+    
+    - name: Extract Frontend Metadata
+      id: meta-frontend
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.ARTIFACT_REGISTRY }}/${{ env.GCP_PROJECT_ID }}/travel-planner/${{ env.SERVICE_NAME_FRONTEND }}
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=sha,prefix={{branch}}-
+          type=raw,value=latest,enable={{is_default_branch}}
+    
+    - name: Build and Push Backend Image
+      id: build-backend
+      uses: docker/build-push-action@v5
+      with:
+        context: ./backend
+        file: ./backend/Dockerfile
+        push: true
+        tags: ${{ steps.meta-backend.outputs.tags }}
+        labels: ${{ steps.meta-backend.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        platforms: linux/amd64
+        sbom: true
+        provenance: true
+    
+    - name: Build and Push Frontend Image
+      id: build-frontend
+      uses: docker/build-push-action@v5
+      with:
+        context: ./frontend
+        file: ./frontend/Dockerfile
+        push: true
+        tags: ${{ steps.meta-frontend.outputs.tags }}
+        labels: ${{ steps.meta-frontend.outputs.labels }}
+        build-args: |
+          VITE_API_BASE_URL=${{ secrets.VITE_API_BASE_URL }}
+          VITE_FIREBASE_API_KEY=${{ secrets.VITE_FIREBASE_API_KEY }}
+          VITE_FIREBASE_AUTH_DOMAIN=${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
+          VITE_FIREBASE_PROJECT_ID=${{ secrets.VITE_FIREBASE_PROJECT_ID }}
+          VITE_GOOGLE_MAPS_API_KEY=${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        platforms: linux/amd64
+        sbom: true
+        provenance: true
+    
+    # Sign container images
+    - name: Install Cosign
+      uses: sigstore/cosign-installer@v3
+    
+    - name: Sign Backend Image
+      run: |
+        cosign sign --yes ${{ env.ARTIFACT_REGISTRY }}/${{ env.GCP_PROJECT_ID }}/travel-planner/${{ env.SERVICE_NAME_BACKEND }}@${{ steps.build-backend.outputs.digest }}
+    
+    - name: Sign Frontend Image
+      run: |
+        cosign sign --yes ${{ env.ARTIFACT_REGISTRY }}/${{ env.GCP_PROJECT_ID }}/travel-planner/${{ env.SERVICE_NAME_FRONTEND }}@${{ steps.build-frontend.outputs.digest }}
+
+  # Deploy to Staging - Phase 6
+  deploy-staging:
+    name: Deploy to Staging Environment
+    runs-on: ubuntu-latest
+    needs: [build-and-package, performance-testing]
+    if: github.ref == 'refs/heads/develop'
+    environment: 
+      name: staging
+      url: ${{ steps.deploy.outputs.url }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Authenticate to Google Cloud
+      uses: google-github-actions/auth@v2
+      with:
+        credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
+    
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
+    
+    - name: Deploy to Staging with Blue-Green Strategy
+      id: deploy
+      run: |
+        # Deploy backend
+        gcloud run deploy ${{ env.SERVICE_NAME_BACKEND }}-staging \
+          --image=${{ needs.build-and-package.outputs.backend-image }} \
+          --platform=managed \
+          --region=${{ env.GCP_REGION }} \
+          --service-account="travel-planner-backend-staging@${{ env.GCP_PROJECT_ID }}.iam.gserviceaccount.com" \
+          --port=8080 \
+          --memory=2Gi \
+          --cpu=2 \
+          --min-instances=0 \
+          --max-instances=5 \
+          --concurrency=80 \
+          --timeout=300 \
+          --set-env-vars="NODE_ENV=staging,PORT=8080" \
+          --set-secrets="ANTHROPIC_API_KEY=anthropic-api-key-staging:latest" \
+          --labels="app=travel-planner,component=backend,environment=staging" \
+          --tag=staging-${{ github.sha }} \
+          --no-traffic
+        
+        # Deploy frontend
+        gcloud run deploy ${{ env.SERVICE_NAME_FRONTEND }}-staging \
+          --image=${{ needs.build-and-package.outputs.frontend-image }} \
+          --platform=managed \
+          --region=${{ env.GCP_REGION }} \
+          --port=80 \
+          --memory=512Mi \
+          --cpu=1 \
+          --min-instances=0 \
+          --max-instances=3 \
+          --concurrency=100 \
+          --timeout=60 \
+          --labels="app=travel-planner,component=frontend,environment=staging" \
+          --tag=staging-${{ github.sha }} \
+          --no-traffic
+        
+        # Health check before switching traffic
+        BACKEND_URL=$(gcloud run services describe ${{ env.SERVICE_NAME_BACKEND }}-staging --region=${{ env.GCP_REGION }} --format="value(status.url)")
+        FRONTEND_URL=$(gcloud run services describe ${{ env.SERVICE_NAME_FRONTEND }}-staging --region=${{ env.GCP_REGION }} --format="value(status.url)")
+        
+        # Switch traffic to new revision
+        gcloud run services update-traffic ${{ env.SERVICE_NAME_BACKEND }}-staging --to-revisions=staging-${{ github.sha }}=100 --region=${{ env.GCP_REGION }}
+        gcloud run services update-traffic ${{ env.SERVICE_NAME_FRONTEND }}-staging --to-revisions=staging-${{ github.sha }}=100 --region=${{ env.GCP_REGION }}
+        
+        echo "url=$FRONTEND_URL" >> $GITHUB_OUTPUT
+    
+    - name: Comprehensive Staging Tests
+      run: |
+        chmod +x scripts/staging-tests.sh
+        ./scripts/staging-tests.sh ${{ steps.deploy.outputs.url }}
+
+  # Deploy to Production - Phase 7
+  deploy-production:
+    name: Deploy to Production with Blue-Green
+    runs-on: ubuntu-latest
+    needs: [build-and-package]
+    if: github.ref == 'refs/heads/main'
+    environment: 
+      name: production
+      url: ${{ steps.deploy.outputs.url }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Authenticate to Google Cloud
+      uses: google-github-actions/auth@v2
+      with:
+        credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
+    
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
+    
+    - name: Pre-deployment Database Migration
+      run: |
+        # Run any necessary database migrations
+        cd backend
+        npm ci
+        npm run db:migrate:production
+      env:
+        FIRESTORE_PROJECT_ID: ${{ secrets.FIRESTORE_PROJECT_ID }}
+        GOOGLE_APPLICATION_CREDENTIALS: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
+    
+    - name: Blue-Green Production Deployment
+      id: deploy
+      run: |
+        # Deploy backend with blue-green strategy
+        NEW_REVISION="prod-${{ github.sha }}"
+        
+        # Deploy new revision without traffic
+        gcloud run deploy ${{ env.SERVICE_NAME_BACKEND }} \
+          --image=${{ needs.build-and-package.outputs.backend-image }} \
+          --platform=managed \
+          --region=${{ env.GCP_REGION }} \
+          --service-account="travel-planner-backend@${{ env.GCP_PROJECT_ID }}.iam.gserviceaccount.com" \
+          --port=8080 \
+          --memory=2Gi \
+          --cpu=2 \
+          --min-instances=1 \
+          --max-instances=10 \
+          --concurrency=80 \
+          --timeout=300 \
+          --set-env-vars="NODE_ENV=production,PORT=8080" \
+          --set-secrets="ANTHROPIC_API_KEY=anthropic-api-key:latest,AMADEUS_CLIENT_ID=amadeus-client-id:latest,AMADEUS_CLIENT_SECRET=amadeus-client-secret:latest,JWT_SECRET=jwt-secret:latest" \
+          --labels="app=travel-planner,component=backend,environment=production" \
+          --tag=$NEW_REVISION \
+          --no-traffic
+        
+        # Deploy frontend
+        gcloud run deploy ${{ env.SERVICE_NAME_FRONTEND }} \
+          --image=${{ needs.build-and-package.outputs.frontend-image }} \
+          --platform=managed \
+          --region=${{ env.GCP_REGION }} \
+          --port=80 \
+          --memory=512Mi \
+          --cpu=1 \
+          --min-instances=1 \
+          --max-instances=5 \
+          --concurrency=100 \
+          --timeout=60 \
+          --labels="app=travel-planner,component=frontend,environment=production" \
+          --tag=$NEW_REVISION \
+          --no-traffic
+        
+        # Health checks before traffic switch
+        BACKEND_URL=$(gcloud run services describe ${{ env.SERVICE_NAME_BACKEND }} --region=${{ env.GCP_REGION }} --format="value(status.traffic[0].url)")
+        FRONTEND_URL=$(gcloud run services describe ${{ env.SERVICE_NAME_FRONTEND }} --region=${{ env.GCP_REGION }} --format="value(status.url)")
+        
+        # Gradual traffic shift: 10% -> 50% -> 100%
+        echo "Shifting 10% traffic to new revision..."
+        gcloud run services update-traffic ${{ env.SERVICE_NAME_BACKEND }} --to-revisions=$NEW_REVISION=10,LATEST=90 --region=${{ env.GCP_REGION }}
+        gcloud run services update-traffic ${{ env.SERVICE_NAME_FRONTEND }} --to-revisions=$NEW_REVISION=10,LATEST=90 --region=${{ env.GCP_REGION }}
+        
+        sleep 300  # Monitor for 5 minutes
+        
+        echo "Shifting 50% traffic to new revision..."
+        gcloud run services update-traffic ${{ env.SERVICE_NAME_BACKEND }} --to-revisions=$NEW_REVISION=50,LATEST=50 --region=${{ env.GCP_REGION }}
+        gcloud run services update-traffic ${{ env.SERVICE_NAME_FRONTEND }} --to-revisions=$NEW_REVISION=50,LATEST=50 --region=${{ env.GCP_REGION }}
+        
+        sleep 300  # Monitor for 5 minutes
+        
+        echo "Shifting 100% traffic to new revision..."
+        gcloud run services update-traffic ${{ env.SERVICE_NAME_BACKEND }} --to-revisions=$NEW_REVISION=100 --region=${{ env.GCP_REGION }}
+        gcloud run services update-traffic ${{ env.SERVICE_NAME_FRONTEND }} --to-revisions=$NEW_REVISION=100 --region=${{ env.GCP_REGION }}
+        
+        echo "url=$FRONTEND_URL" >> $GITHUB_OUTPUT
+    
+    - name: Post-deployment Verification
+      run: |
+        chmod +x scripts/production-tests.sh
+        ./scripts/production-tests.sh ${{ steps.deploy.outputs.url }}
+    
+    - name: Create Release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: v${{ github.run_number }}
+        release_name: Release v${{ github.run_number }}
+        body: |
+          Automated production deployment
+          - Frontend: ${{ steps.deploy.outputs.url }}
+          - Backend: ${{ needs.build-and-package.outputs.backend-image }}
+          - Commit: ${{ github.sha }}
+        draft: false
+        prerelease: false
+    
+    - name: Notify Deployment Success
+      uses: 8398a7/action-slack@v3
+      if: success()
+      with:
+        status: success
+        channel: '#deployments'
+        text: |
+          🚀 Production deployment successful!
+          Frontend: ${{ steps.deploy.outputs.url }}
+          Version: v${{ github.run_number }}
+        webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+
+  # Rollback Job (triggered manually or on failure)
+  rollback-production:
+    name: Rollback Production Deployment
+    runs-on: ubuntu-latest
+    if: failure()
+    needs: [deploy-production]
+    environment: production
+    
+    steps:
+    - name: Authenticate to Google Cloud
+      uses: google-github-actions/auth@v2
+      with:
+        credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
+    
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
+    
+    - name: Rollback to Previous Revision
+      run: |
+        # Get previous revision
+        PREV_REVISION=$(gcloud run revisions list --service=${{ env.SERVICE_NAME_BACKEND }} --region=${{ env.GCP_REGION }} --limit=2 --format="value(metadata.name)" | tail -n 1)
+        
+        # Rollback backend
+        gcloud run services update-traffic ${{ env.SERVICE_NAME_BACKEND }} --to-revisions=$PREV_REVISION=100 --region=${{ env.GCP_REGION }}
+        
+        # Get previous frontend revision
+        PREV_FRONTEND_REVISION=$(gcloud run revisions list --service=${{ env.SERVICE_NAME_FRONTEND }} --region=${{ env.GCP_REGION }} --limit=2 --format="value(metadata.name)" | tail -n 1)
+        
+        # Rollback frontend
+        gcloud run services update-traffic ${{ env.SERVICE_NAME_FRONTEND }} --to-revisions=$PREV_FRONTEND_REVISION=100 --region=${{ env.GCP_REGION }}
+        
+        echo "Rollback completed to revision: $PREV_REVISION"
+    
+    - name: Notify Rollback
+      uses: 8398a7/action-slack@v3
+      with:
+        status: failure
+        channel: '#deployments'
+        text: |
+          ⚠️ Production rollback executed due to deployment failure
+          Check logs and investigate issues
+        webhook_url: ${{ secrets.SLACK_WEBHOOK }}

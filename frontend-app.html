@@ -1,0 +1,916 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🌍 AI Travel Planner</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: white;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+        
+        .header h1 {
+            font-size: 3em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+        
+        .form-container {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 40px;
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            margin-bottom: 40px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+        }
+        
+        .form-group {
+            margin-bottom: 25px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            font-size: 1.1em;
+        }
+        
+        .form-group input, .form-group select, .form-group textarea {
+            width: 100%;
+            padding: 15px;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            background: rgba(255, 255, 255, 0.9);
+            color: #333;
+            transition: all 0.3s ease;
+        }
+        
+        .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+            outline: none;
+            background: white;
+            box-shadow: 0 0 20px rgba(255, 255, 255, 0.3);
+            transform: translateY(-2px);
+        }
+        
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        
+        .generate-btn {
+            background: linear-gradient(45deg, #ff6b6b, #ee5a24);
+            color: white;
+            border: none;
+            padding: 18px 40px;
+            font-size: 18px;
+            font-weight: bold;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(255, 107, 107, 0.3);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .generate-btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 25px rgba(255, 107, 107, 0.4);
+        }
+        
+        .generate-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            font-size: 1.2em;
+        }
+        
+        .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top: 4px solid white;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .itinerary-result {
+            background: rgba(255, 255, 255, 0.95);
+            color: #333;
+            padding: 40px;
+            border-radius: 20px;
+            margin-top: 30px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+        }
+        
+        .itinerary-result h2 {
+            color: #2c3e50;
+            margin-bottom: 20px;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+        }
+        
+        .itinerary-content {
+            white-space: pre-line;
+            line-height: 1.8;
+            font-size: 16px;
+        }
+        
+        .error {
+            background: rgba(231, 76, 60, 0.9);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: 20px;
+        }
+        
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 40px;
+        }
+        
+        .feature {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 25px;
+            border-radius: 15px;
+            text-align: center;
+            transition: transform 0.3s ease;
+        }
+        
+        .feature:hover {
+            transform: translateY(-5px);
+        }
+        
+        .feature-icon {
+            font-size: 2.5em;
+            margin-bottom: 15px;
+            display: block;
+        }
+        
+        /* Interest Pills Styling */
+        .interest-pills {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        
+        .pill {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 25px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 14px;
+            border: 2px solid transparent;
+            user-select: none;
+        }
+        
+        .pill:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateY(-2px);
+        }
+        
+        .pill.selected {
+            background: linear-gradient(45deg, #ff6b6b, #ee5a24);
+            border-color: rgba(255, 255, 255, 0.5);
+            box-shadow: 0 4px 15px rgba(255, 107, 107, 0.3);
+        }
+        
+        /* Checkbox Styling */
+        .checkbox-group {
+            display: flex;
+            gap: 20px;
+            margin-top: 10px;
+            flex-wrap: wrap;
+        }
+        
+        .checkbox-label {
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+            font-size: 16px;
+            position: relative;
+            padding-left: 35px;
+            margin-bottom: 12px;
+            user-select: none;
+        }
+        
+        .checkbox-label input {
+            position: absolute;
+            opacity: 0;
+            cursor: pointer;
+            height: 0;
+            width: 0;
+        }
+        
+        .checkmark {
+            position: absolute;
+            top: 0;
+            left: 0;
+            height: 25px;
+            width: 25px;
+            background-color: rgba(255, 255, 255, 0.2);
+            border-radius: 6px;
+            transition: all 0.3s ease;
+        }
+        
+        .checkbox-label:hover input ~ .checkmark {
+            background-color: rgba(255, 255, 255, 0.3);
+        }
+        
+        .checkbox-label input:checked ~ .checkmark {
+            background: linear-gradient(45deg, #ff6b6b, #ee5a24);
+        }
+        
+        .checkmark:after {
+            content: "";
+            position: absolute;
+            display: none;
+        }
+        
+        .checkbox-label input:checked ~ .checkmark:after {
+            display: block;
+        }
+        
+        .checkbox-label .checkmark:after {
+            left: 9px;
+            top: 5px;
+            width: 5px;
+            height: 10px;
+            border: solid white;
+            border-width: 0 3px 3px 0;
+            transform: rotate(45deg);
+        }
+        
+        /* Flight and Hotel Cards */
+        .options-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+        
+        .option-card {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease;
+            color: #333;
+        }
+        
+        .option-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+        }
+        
+        .flight-route {
+            display: flex;
+            align-items: center;
+            margin: 10px 0;
+            font-weight: bold;
+        }
+        
+        .route-arrow {
+            margin: 0 10px;
+            color: #3498db;
+        }
+        
+        .book-button {
+            background: linear-gradient(45deg, #3498db, #2980b9);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 25px;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+            margin-top: 10px;
+            transition: all 0.3s ease;
+        }
+        
+        .book-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(52, 152, 219, 0.3);
+        }
+        
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 2em;
+            }
+            
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+            
+            .form-container {
+                padding: 20px;
+            }
+            
+            .checkbox-group {
+                flex-direction: column;
+                gap: 10px;
+            }
+            
+            .interest-pills {
+                justify-content: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🌍 AI Travel Planner</h1>
+            <p>Create personalized travel itineraries powered by AI</p>
+        </div>
+        
+        <div class="features-grid">
+            <div class="feature">
+                <span class="feature-icon">🤖</span>
+                <h3>AI-Powered</h3>
+                <p>Smart itineraries using Anthropic Claude AI</p>
+            </div>
+            <div class="feature">
+                <span class="feature-icon">✈️</span>
+                <h3>Live Flight Data</h3>
+                <p>Real-time flight prices via Amadeus API</p>
+            </div>
+            <div class="feature">
+                <span class="feature-icon">🏨</span>
+                <h3>Hotel Recommendations</h3>
+                <p>Best accommodations for your budget</p>
+            </div>
+            <div class="feature">
+                <span class="feature-icon">💰</span>
+                <h3>Budget Optimization</h3>
+                <p>Smart spending recommendations</p>
+            </div>
+        </div>
+        
+        <div class="form-container">
+            <form id="itineraryForm">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="originCity">🛫 Origin City:</label>
+                        <input type="text" id="originCity" name="originCity" placeholder="e.g., New York, NY" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="destination">🎯 Destination:</label>
+                        <input type="text" id="destination" name="destination" placeholder="e.g., Paris, France" required>
+                    </div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="departureDate">📅 Departure Date:</label>
+                        <input type="date" id="departureDate" name="departureDate" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="returnDate">🔄 Return Date:</label>
+                        <input type="date" id="returnDate" name="returnDate">
+                    </div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="duration">📅 Duration (auto-calculated):</label>
+                        <input type="number" id="duration" name="duration" min="1" max="30" value="3" readonly style="background-color: #f0f0f0;">
+                        <small style="color: #666; font-size: 0.9em;">Duration will be calculated automatically from your dates</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="groupSize">👥 Group Size:</label>
+                        <input type="number" id="groupSize" name="groupSize" min="1" max="20" value="2">
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="currency">💱 Preferred Currency:</label>
+                    <select id="currency" name="currency">
+                        <option value="INR" selected>INR (Indian Rupee)</option>
+                        <option value="USD">USD (US Dollar)</option>
+                        <option value="EUR">EUR (Euro)</option>
+                        <option value="GBP">GBP (British Pound)</option>
+                    </select>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="budget">💳 Budget:</label>
+                        <select id="budget" name="budget">
+                            <option value="budget">Budget-friendly</option>
+                            <option value="moderate" selected>Moderate</option>
+                            <option value="luxury">Luxury</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="travelStyle">🚶 Travel Style:</label>
+                        <select id="travelStyle" name="travelStyle">
+                            <option value="relaxed">Relaxed</option>
+                            <option value="balanced" selected>Balanced</option>
+                            <option value="packed">Action-packed</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label>🎨 Select Your Interests:</label>
+                    <div class="interest-pills" id="interestPills">
+                        <span class="pill" data-interest="culture">🏛️ Culture</span>
+                        <span class="pill" data-interest="food">🍽️ Food</span>
+                        <span class="pill" data-interest="adventure">🏔️ Adventure</span>
+                        <span class="pill" data-interest="art">🎨 Art</span>
+                        <span class="pill" data-interest="history">📚 History</span>
+                        <span class="pill" data-interest="nightlife">🌃 Nightlife</span>
+                        <span class="pill" data-interest="shopping">🛍️ Shopping</span>
+                        <span class="pill" data-interest="nature">🌿 Nature</span>
+                        <span class="pill" data-interest="beaches">🏖️ Beaches</span>
+                        <span class="pill" data-interest="museums">🏛️ Museums</span>
+                        <span class="pill" data-interest="architecture">🏗️ Architecture</span>
+                        <span class="pill" data-interest="music">🎵 Music</span>
+                    </div>
+                    <input type="hidden" id="interests" name="interests">
+                </div>
+                
+                <div class="form-group">
+                    <label>🔍 Include Live Data:</label>
+                    <div class="checkbox-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="includeFlights" name="includeFlights" checked>
+                            <span class="checkmark"></span>
+                            ✈️ Search Live Flights
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="includeHotels" name="includeHotels" checked>
+                            <span class="checkmark"></span>
+                            🏨 Search Live Hotels
+                        </label>
+                    </div>
+                </div>
+                
+                <div class="form-group" style="text-align: center; margin-top: 30px;">
+                    <button type="submit" class="generate-btn">
+                        🚀 Generate My AI Itinerary
+                    </button>
+                </div>
+            </form>
+        </div>
+        
+        <div id="loading" class="loading" style="display: none;">
+            <div class="spinner"></div>
+            <p>🤖 AI is crafting your perfect itinerary...</p>
+        </div>
+        
+        <div id="result" class="itinerary-result" style="display: none;"></div>
+        <div id="error" class="error" style="display: none;"></div>
+    </div>
+
+    <script>
+        const API_BASE_URL = 'https://ai-travel-backend-rdq67befza-uc.a.run.app/api/v1';
+        
+        // Utility function to format flight duration
+        function formatDuration(isoDuration) {
+            const match = isoDuration.match(/PT(\d+)H(\d+)M/);
+            if (match) {
+                const hours = parseInt(match[1]);
+                const minutes = parseInt(match[2]);
+                return `${hours}h ${minutes}m`;
+            }
+            return isoDuration;
+        }
+        
+        // Calculate duration between dates
+        function calculateDuration() {
+            const departureDate = document.getElementById('departureDate').value;
+            const returnDate = document.getElementById('returnDate').value;
+            
+            if (departureDate && returnDate) {
+                const departure = new Date(departureDate);
+                const returnD = new Date(returnDate);
+                const diffTime = Math.abs(returnD - departure);
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                
+                if (diffDays > 0) {
+                    document.getElementById('duration').value = diffDays;
+                }
+            }
+        }
+        
+        // Interest pills functionality
+        function setupInterestPills() {
+            const pills = document.querySelectorAll('.pill');
+            const hiddenInput = document.getElementById('interests');
+            let selectedInterests = [];
+            
+            pills.forEach(pill => {
+                pill.addEventListener('click', function() {
+                    const interest = this.dataset.interest;
+                    
+                    if (this.classList.contains('selected')) {
+                        this.classList.remove('selected');
+                        selectedInterests = selectedInterests.filter(i => i !== interest);
+                    } else {
+                        this.classList.add('selected');
+                        selectedInterests.push(interest);
+                    }
+                    
+                    hiddenInput.value = selectedInterests.join(', ');
+                });
+            });
+        }
+        
+        // Set default dates and setup functionality
+        document.addEventListener('DOMContentLoaded', function() {
+            const today = new Date();
+            const tomorrow = new Date(today);
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            const weekLater = new Date(today);
+            weekLater.setDate(weekLater.getDate() + 8);
+            
+            document.getElementById('departureDate').value = tomorrow.toISOString().split('T')[0];
+            document.getElementById('returnDate').value = weekLater.toISOString().split('T')[0];
+            
+            // Calculate initial duration
+            calculateDuration();
+            
+            // Setup interest pills
+            setupInterestPills();
+            
+            // Add event listeners for date changes
+            document.getElementById('departureDate').addEventListener('change', calculateDuration);
+            document.getElementById('returnDate').addEventListener('change', calculateDuration);
+        });
+
+        document.getElementById('itineraryForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(e.target);
+            const data = {
+                originCity: formData.get('originCity'),
+                destination: formData.get('destination'),
+                departureDate: formData.get('departureDate'),
+                returnDate: formData.get('returnDate'),
+                duration: parseInt(formData.get('duration')),
+                budget: formData.get('budget'),
+                interests: formData.get('interests'),
+                travelStyle: formData.get('travelStyle'),
+                groupSize: parseInt(formData.get('groupSize')),
+                currency: formData.get('currency'),
+                includeFlights: document.getElementById('includeFlights').checked,
+                includeHotels: document.getElementById('includeHotels').checked
+            };
+            
+            // Show loading
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('result').style.display = 'none';
+            document.getElementById('error').style.display = 'none';
+            document.querySelector('.generate-btn').disabled = true;
+            
+            try {
+                let flightData = null;
+                let hotelData = null;
+                
+                // Search for flights if requested
+                if (data.includeFlights && data.originCity && data.departureDate) {
+                    try {
+                        const flightResponse = await fetch(`${API_BASE_URL}/search/flights`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                origin: data.originCity,
+                                destination: data.destination,
+                                departureDate: data.departureDate,
+                                returnDate: data.returnDate,
+                                adults: data.groupSize,
+                                currency: data.currency,
+                                max: 5
+                            })
+                        });
+                        
+                        if (flightResponse.ok) {
+                            flightData = await flightResponse.json();
+                        }
+                    } catch (flightError) {
+                        console.log('Flight search failed:', flightError);
+                    }
+                }
+                
+                // Search for hotels if requested
+                if (data.includeHotels && data.destination && data.departureDate) {
+                    try {
+                        const hotelResponse = await fetch(`${API_BASE_URL}/search/hotels`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                cityCode: data.destination,
+                                checkInDate: data.departureDate,
+                                checkOutDate: data.returnDate || data.departureDate,
+                                adults: data.groupSize,
+                                currency: data.currency
+                            })
+                        });
+                        
+                        if (hotelResponse.ok) {
+                            hotelData = await hotelResponse.json();
+                        }
+                    } catch (hotelError) {
+                        console.log('Hotel search failed:', hotelError);
+                    }
+                }
+                
+                // Generate AI itinerary with live data
+                const itineraryData = {
+                    ...data,
+                    flightData: flightData,
+                    hotelData: hotelData
+                };
+                
+                const response = await fetch(`${API_BASE_URL}/itineraries/generate`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(itineraryData)
+                });
+                
+                const result = await response.json();
+                
+                document.getElementById('loading').style.display = 'none';
+                document.querySelector('.generate-btn').disabled = false;
+                
+                if (result.success && result.itinerary) {
+                    const resultDiv = document.getElementById('result');
+                    
+                    // Build flight information section
+                    let flightSection = '';
+                    if (flightData && flightData.success && flightData.results.length > 0) {
+                        const flightCount = flightData.results.length;
+                        const flightOptions = flightData.results.slice(0, 3).map((flight, index) => {
+                            // Build complete route display
+                            let routeDisplay = '';
+                            if (flight.segments && flight.segments.length > 0) {
+                                const segments = flight.segments;
+                                if (segments.length === 1) {
+                                    // Direct flight
+                                    routeDisplay = `
+                                        <div class="flight-route">
+                                            <strong>${segments[0].departure.airport}</strong>
+                                            <span class="route-arrow">→</span>
+                                            <strong>${segments[0].arrival.airport}</strong>
+                                            <span style="margin-left: 10px; color: #27ae60;">(Direct)</span>
+                                        </div>
+                                    `;
+                                } else {
+                                    // Multi-leg flight
+                                    const stops = segments.map(seg => seg.departure.airport).concat(segments[segments.length - 1].arrival.airport);
+                                    routeDisplay = `
+                                        <div class="flight-route">
+                                            ${stops.map((airport, i) => i < stops.length - 1 ? `<strong>${airport}</strong><span class="route-arrow">→</span>` : `<strong>${airport}</strong>`).join('')}
+                                            <span style="margin-left: 10px; color: #e67e22;">(${segments.length - 1} stop${segments.length > 2 ? 's' : ''})</span>
+                                        </div>
+                                    `;
+                                }
+                            }
+                            
+                            return `
+                                <div class="option-card">
+                                    <h4 style="color: #3498db; margin-bottom: 10px;">Flight Option ${index + 1}</h4>
+                                    <div style="font-size: 18px; font-weight: bold; color: #27ae60; margin-bottom: 10px;">
+                                        ${flight.price.formatted || (data.currency + ' ' + flight.price.total)}
+                                    </div>
+                                    <div style="margin-bottom: 10px;">
+                                        <strong>Duration:</strong> ${formatDuration(flight.duration)}
+                                    </div>
+                                    ${routeDisplay}
+                                    <div style="margin: 10px 0; font-size: 14px; color: #666;">
+                                        <strong>Departure:</strong> ${new Date(flight.segments[0].departure.time).toLocaleString()}<br>
+                                        <strong>Arrival:</strong> ${new Date(flight.segments[flight.segments.length - 1].arrival.time).toLocaleString()}<br>
+                                        <strong>Airline:</strong> ${flight.segments[0].carrier} ${flight.segments[0].flightNumber}
+                                    </div>
+                                    <a href="${flight.bookingUrl || 'https://www.amadeus.com'}" target="_blank" class="book-button">Book This Flight</a>
+                                    ${flight.alternativeNote ? `<div style="margin-top: 10px; padding: 8px; background: #fff3cd; border-radius: 5px; font-size: 12px; color: #856404;"><strong>💡 Alternative:</strong> ${flight.alternativeNote}</div>` : ''}
+                                </div>
+                            `;
+                        }).join('');
+                        
+                        // Add recommendations if available
+                        let flightRecommendations = '';
+                        if (flightData.recommendations && flightData.recommendations.length > 0) {
+                            flightRecommendations = `
+                                <div style="background: #e8f5e8; padding: 15px; border-radius: 10px; margin-bottom: 15px;">
+                                    <h4 style="color: #27ae60; margin-bottom: 10px;">💡 Smart Recommendations</h4>
+                                    ${flightData.recommendations.map(rec => `<p style="margin: 5px 0; color: #2d5016;">• ${rec}</p>`).join('')}
+                                </div>
+                            `;
+                        }
+                        
+                        flightSection = `
+                            <div style="background: #f8f9fa; padding: 20px; border-radius: 15px; margin-bottom: 20px;">
+                                <h3 style="color: #2c3e50; margin-bottom: 15px;">✈️ Flight Options</h3>
+                                <p style="color: #666; margin-bottom: 15px;">Found ${flightCount} flight${flightCount > 1 ? 's' : ''} for your dates (Search strategy: ${flightData.searchStrategy})</p>
+                                ${flightRecommendations}
+                                <div class="options-grid">
+                                    ${flightOptions}
+                                </div>
+                                ${flightData.priceRange ? `<p style="color: #666; margin-top: 15px; font-size: 14px;">💰 Price range: ₹${Math.round(flightData.priceRange.min).toLocaleString('en-IN')} - ₹${Math.round(flightData.priceRange.max).toLocaleString('en-IN')}</p>` : ''}
+                            </div>
+                        `;
+                    } else if (data.includeFlights) {
+                        // Show graceful error for flight search
+                        flightSection = `
+                            <div style="background: #fff3cd; padding: 20px; border-radius: 15px; margin-bottom: 20px; border-left: 4px solid #ffc107;">
+                                <h3 style="color: #856404; margin-bottom: 15px;">✈️ Flight Search</h3>
+                                <p style="color: #856404; margin-bottom: 10px;">🔍 Flight search was not available for this route and dates.</p>
+                                <p style="color: #856404; font-size: 14px;">Please check alternative dates, nearby airports, or booking sites directly for flight options.</p>
+                            </div>
+                        `;
+                    }
+                    
+                    // Build hotel information section
+                    let hotelSection = '';
+                    if (hotelData && hotelData.success && hotelData.results.length > 0) {
+                        const hotelCount = hotelData.results.length;
+                        const hotelOptions = hotelData.results.slice(0, 3).map((hotel, index) => {
+                            const rating = hotel.rating || '4';
+                            const address = hotel.address ? Object.values(hotel.address).join(', ') : 'City Center';
+                            const amenities = hotel.amenities ? hotel.amenities.slice(0, 3).join(', ') : 'WiFi, Restaurant, Room Service';
+                            
+                            // Hotel pricing display
+                            let priceDisplay = '';
+                            if (hotel.price && hotel.price.formatted) {
+                                priceDisplay = `
+                                    <div style="font-size: 18px; font-weight: bold; color: #27ae60; margin-bottom: 10px;">
+                                        ${hotel.price.formatted.total} <span style="font-size: 14px; color: #666;">(${hotel.price.formatted.perNight})</span>
+                                    </div>
+                                    <div style="margin-bottom: 10px; color: #666; font-size: 14px;">
+                                        <strong>Duration:</strong> ${hotel.price.nights} night${hotel.price.nights > 1 ? 's' : ''}
+                                    </div>
+                                `;
+                            } else if (!hotel.hasLivePrice) {
+                                priceDisplay = `
+                                    <div style="margin-bottom: 10px; color: #f39c12; font-size: 14px;">
+                                        <strong>💰 Live pricing not available</strong> - Check booking site for current rates
+                                    </div>
+                                `;
+                            }
+                            
+                            return `
+                                <div class="option-card">
+                                    <h4 style="color: #e67e22; margin-bottom: 10px;">${hotel.name}</h4>
+                                    <div style="margin-bottom: 10px;">
+                                        <span style="color: #f39c12; font-size: 18px;">${'⭐'.repeat(parseInt(rating))}</span>
+                                        <span style="margin-left: 5px; color: #666;">(${rating}/5)</span>
+                                    </div>
+                                    ${priceDisplay}
+                                    <div style="margin-bottom: 10px; color: #666;">
+                                        <strong>📍 Location:</strong> ${address}
+                                    </div>
+                                    <div style="margin-bottom: 15px; color: #666;">
+                                        <strong>🏨 Amenities:</strong> ${amenities}
+                                    </div>
+                                    <div style="margin-bottom: 10px; color: #666; font-size: 12px;">
+                                        <strong>Status:</strong> ${hotel.availabilityStatus === 'available' ? '✅ Available' : '❓ Check Availability'}
+                                    </div>
+                                    <a href="${hotel.bookingUrl || 'https://www.booking.com'}" target="_blank" class="book-button">Book This Hotel</a>
+                                </div>
+                            `;
+                        }).join('');
+                        
+                        // Add hotel recommendations if available
+                        let hotelRecommendations = '';
+                        if (hotelData.recommendations && hotelData.recommendations.length > 0) {
+                            hotelRecommendations = `
+                                <div style="background: #e8f5e8; padding: 15px; border-radius: 10px; margin-bottom: 15px;">
+                                    <h4 style="color: #27ae60; margin-bottom: 10px;">💡 Smart Recommendations</h4>
+                                    ${hotelData.recommendations.map(rec => `<p style="margin: 5px 0; color: #2d5016;">• ${rec}</p>`).join('')}
+                                </div>
+                            `;
+                        }
+                        
+                        hotelSection = `
+                            <div style="background: #f8f9fa; padding: 20px; border-radius: 15px; margin-bottom: 20px;">
+                                <h3 style="color: #2c3e50; margin-bottom: 15px;">🏨 Hotel Options</h3>
+                                <p style="color: #666; margin-bottom: 15px;">Found ${hotelCount} hotel${hotelCount > 1 ? 's' : ''} in your destination</p>
+                                ${hotelRecommendations}
+                                <div class="options-grid">
+                                    ${hotelOptions}
+                                </div>
+                                ${hotelData.priceRange ? `<p style="color: #666; margin-top: 15px; font-size: 14px;">💰 Price range: ₹${Math.round(hotelData.priceRange.min).toLocaleString('en-IN')} - ₹${Math.round(hotelData.priceRange.max).toLocaleString('en-IN')} per night</p>` : ''}
+                            </div>
+                        `;
+                    } else if (data.includeHotels) {
+                        // Show graceful error for hotel search
+                        hotelSection = `
+                            <div style="background: #fff3cd; padding: 20px; border-radius: 15px; margin-bottom: 20px; border-left: 4px solid #ffc107;">
+                                <h3 style="color: #856404; margin-bottom: 15px;">🏨 Hotel Search</h3>
+                                <p style="color: #856404; margin-bottom: 10px;">🔍 Hotel search was not available for this destination and dates.</p>
+                                <p style="color: #856404; font-size: 14px;">Please check booking sites directly for hotel options in your destination.</p>
+                            </div>
+                        `;
+                    }
+                    
+                    resultDiv.innerHTML = `
+                        <h2>🗺️ Your Complete Travel Plan for ${result.itinerary.destination}</h2>
+                        <div style="background: #ecf0f1; padding: 15px; border-radius: 10px; margin-bottom: 20px;">
+                            <strong>📊 Trip Summary:</strong><br>
+                            🛫 From: ${data.originCity}<br>
+                            🎯 To: ${result.itinerary.destination}<br>
+                            📅 Dates: ${data.departureDate} ${data.returnDate ? '→ ' + data.returnDate : ''}<br>
+                            🗓️ Duration: ${result.itinerary.duration} days<br>
+                            💰 Budget: ${result.itinerary.budget}<br>
+                            👥 Group Size: ${result.itinerary.summary.group_size} people<br>
+                            🕒 Generated: ${new Date(result.itinerary.generated_at).toLocaleString()}
+                        </div>
+                        
+                        ${flightSection}
+                        ${hotelSection}
+                        
+                        <div style="background: white; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
+                            <h3 style="color: #2c3e50; margin-bottom: 15px;">🤖 AI-Generated Itinerary</h3>
+                            <div class="itinerary-content">${result.itinerary.content}</div>
+                        </div>
+                        
+                        <div style="margin-top: 30px; padding: 20px; background: #d5f4e6; border-radius: 10px; color: #27ae60;">
+                            <strong>✅ Complete Travel Plan Generated!</strong><br>
+                            Your personalized travel plan with${flightData ? ' live flight data' : ''}${hotelData ? ' and hotel recommendations' : ''} is ready. Safe travels! 🧳
+                        </div>
+                    `;
+                    resultDiv.style.display = 'block';
+                    resultDiv.scrollIntoView({ behavior: 'smooth' });
+                } else {
+                    throw new Error(result.message || 'Failed to generate itinerary');
+                }
+                
+            } catch (error) {
+                document.getElementById('loading').style.display = 'none';
+                document.querySelector('.generate-btn').disabled = false;
+                
+                document.getElementById('error').innerHTML = `
+                    <h3>❌ Error Generating Itinerary</h3>
+                    <p>${error.message}</p>
+                    <p>Please try again with different parameters.</p>
+                `;
+                document.getElementById('error').style.display = 'block';
+                console.error('Error:', error);
+            }
+        });
+        
+        // Add some interactive effects
+        document.querySelectorAll('input, select').forEach(element => {
+            element.addEventListener('focus', function() {
+                this.parentElement.style.transform = 'translateY(-2px)';
+            });
+            
+            element.addEventListener('blur', function() {
+                this.parentElement.style.transform = 'translateY(0)';
+            });
+        });
+    </script>
+</body>
+</html>

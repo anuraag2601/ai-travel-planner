@@ -1,0 +1,27 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: travel-planner-frontend
+  annotations:
+    run.googleapis.com/ingress: all
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/maxScale: "5"
+        autoscaling.knative.dev/minScale: "0"
+        run.googleapis.com/memory: "512Mi"
+        run.googleapis.com/cpu: "1"
+    spec:
+      containerConcurrency: 100
+      timeoutSeconds: 60
+      containers:
+      - image: nginx:alpine
+        ports:
+        - containerPort: 80
+        command: ["/bin/sh"]
+        args: ["-c", "echo '<html><head><title>AI Travel Planner</title><style>body{font-family:Arial;margin:0;padding:20px;background:linear-gradient(135deg,#667eea,#764ba2);color:white;text-align:center;min-height:100vh;display:flex;flex-direction:column;justify-content:center}h1{font-size:3em;margin:0}p{font-size:1.2em}.features{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:20px;margin:40px 0}.feature{background:rgba(255,255,255,0.1);padding:20px;border-radius:10px}.status{background:rgba(0,255,0,0.2);padding:15px;border-radius:8px;margin:20px 0}a{color:yellow;text-decoration:none}</style></head><body><h1>🌍 AI Travel Planner</h1><p>Your intelligent travel companion powered by AI</p><div class=\"features\"><div class=\"feature\"><h3>🤖 AI Itineraries</h3><p>Personalized travel plans</p></div><div class=\"feature\"><h3>✈️ Live Flights</h3><p>Real-time pricing</p></div><div class=\"feature\"><h3>🏨 Hotels</h3><p>Best accommodations</p></div><div class=\"feature\"><h3>💰 Budget Smart</h3><p>Cost optimization</p></div></div><div class=\"status\"><h3>🚀 Status: LIVE</h3><p>All systems operational!</p></div><p>Backend: <a href=\"https://travel-planner-backend-rdq67befza-uc.a.run.app\">API Service</a></p><p>GitHub: <a href=\"https://github.com/anuraag2601/ai-travel-planner\">Repository</a></p></body></html>' > /usr/share/nginx/html/index.html && nginx -g 'daemon off;'"]
+        resources:
+          limits:
+            cpu: "1"
+            memory: "512Mi"

@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>📊 Sales Dashboard - Travel Leads</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+            min-height: 100vh;
+            color: #ecf0f1;
+        }
+        
+        .dashboard-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 30px;
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 40px;
+        }
+        
+        .stat-card {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 25px;
+            border-radius: 15px;
+            text-align: center;
+            backdrop-filter: blur(10px);
+        }
+        
+        .stat-number {
+            font-size: 2.5em;
+            font-weight: bold;
+            color: #3498db;
+            margin-bottom: 10px;
+        }
+        
+        .controls {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 25px;
+            border-radius: 15px;
+            margin-bottom: 30px;
+            backdrop-filter: blur(10px);
+        }
+        
+        .controls-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .control-group {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .control-group label {
+            margin-bottom: 5px;
+            font-weight: 600;
+        }
+        
+        .control-group select, .control-group input {
+            padding: 10px;
+            border: none;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.9);
+            color: #2c3e50;
+        }
+        
+        .button-group {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(45deg, #3498db, #2980b9);
+            color: white;
+        }
+        
+        .btn-success {
+            background: linear-gradient(45deg, #27ae60, #229954);
+            color: white;
+        }
+        
+        .btn-export {
+            background: linear-gradient(45deg, #e67e22, #d35400);
+            color: white;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+        
+        .leads-table {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            overflow: hidden;
+            color: #2c3e50;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        }
+        
+        .table-header {
+            background: #34495e;
+            color: white;
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .table-content {
+            max-height: 600px;
+            overflow-y: auto;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        th, td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #ecf0f1;
+        }
+        
+        th {
+            background: #f8f9fa;
+            font-weight: 600;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+        
+        tr:hover {
+            background: #f8f9fa;
+        }
+        
+        .priority-high {
+            background: #fee;
+            border-left: 4px solid #e74c3c;
+        }
+        
+        .priority-medium {
+            background: #fffbf0;
+            border-left: 4px solid #f39c12;
+        }
+        
+        .priority-low {
+            background: #f0fff4;
+            border-left: 4px solid #27ae60;
+        }
+        
+        .status-badge {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        
+        .status-new {
+            background: #3498db;
+            color: white;
+        }
+        
+        .status-contacted {
+            background: #f39c12;
+            color: white;
+        }
+        
+        .status-qualified {
+            background: #9b59b6;
+            color: white;
+        }
+        
+        .status-converted {
+            background: #27ae60;
+            color: white;
+        }
+        
+        .status-closed {
+            background: #95a5a6;
+            color: white;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+        }
+        
+        .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top: 4px solid white;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .no-data {
+            text-align: center;
+            padding: 60px;
+            color: #7f8c8d;
+        }
+        
+        .error {
+            background: #e74c3c;
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+        
+        @media (max-width: 768px) {
+            .dashboard-container {
+                padding: 10px;
+            }
+            
+            .header h1 {
+                font-size: 2em;
+            }
+            
+            .controls-row {
+                grid-template-columns: 1fr;
+            }
+            
+            .table-content {
+                overflow-x: auto;
+            }
+            
+            table {
+                min-width: 800px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-container">
+        <div class="header">
+            <h1>📊 Sales Dashboard</h1>
+            <p>Travel Leads Management Portal</p>
+        </div>
+        
+        <div class="stats-grid" id="statsGrid">
+            <div class="stat-card">
+                <div class="stat-number" id="totalLeads">-</div>
+                <div>Total Leads</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="newLeads">-</div>
+                <div>New Leads</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="highPriorityLeads">-</div>
+                <div>High Priority</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="recentLeads">-</div>
+                <div>This Week</div>
+            </div>
+        </div>
+        
+        <div class="controls">
+            <div class="controls-row">
+                <div class="control-group">
+                    <label for="filterStatus">Filter by Status:</label>
+                    <select id="filterStatus">
+                        <option value="">All Statuses</option>
+                        <option value="new">New</option>
+                        <option value="contacted">Contacted</option>
+                        <option value="qualified">Qualified</option>
+                        <option value="converted">Converted</option>
+                        <option value="closed">Closed</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label for="filterPriority">Filter by Priority:</label>
+                    <select id="filterPriority">
+                        <option value="">All Priorities</option>
+                        <option value="high">High</option>
+                        <option value="medium">Medium</option>
+                        <option value="low">Low</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label for="filterBudget">Filter by Budget:</label>
+                    <select id="filterBudget">
+                        <option value="">All Budgets</option>
+                        <option value="luxury">Luxury</option>
+                        <option value="moderate">Moderate</option>
+                        <option value="budget">Budget</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label for="filterDestination">Destination:</label>
+                    <input type="text" id="filterDestination" placeholder="e.g., Paris, Tokyo">
+                </div>
+            </div>
+            
+            <div class="button-group">
+                <button class="btn btn-primary" onclick="loadLeads()">🔄 Refresh Data</button>
+                <button class="btn btn-success" onclick="exportLeads('json')">📊 Export JSON</button>
+                <button class="btn btn-export" onclick="exportLeads('csv')">📈 Export CSV</button>
+                <button class="btn btn-primary" onclick="loadStats()">📈 Update Stats</button>
+            </div>
+        </div>
+        
+        <div class="leads-table">
+            <div class="table-header">
+                <h3>📋 Lead Management</h3>
+                <span id="leadCount">0 leads</span>
+            </div>
+            
+            <div id="loading" class="loading" style="display: none;">
+                <div class="spinner"></div>
+                <p>Loading leads...</p>
+            </div>
+            
+            <div id="error" class="error" style="display: none;"></div>
+            
+            <div class="table-content" id="tableContent">
+                <div class="no-data" id="noData">
+                    <h3>🔍 No leads found</h3>
+                    <p>Start by loading leads or adjust your filters</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Configuration
+        const API_BASE_URL = 'https://ai-travel-backend-rdq67befza-uc.a.run.app/api/v1';
+        
+        let currentLeads = [];
+        
+        // Load leads from API
+        async function loadLeads() {
+            showLoading(true);
+            hideError();
+            
+            try {
+                // Build query parameters
+                const params = new URLSearchParams();
+                
+                const status = document.getElementById('filterStatus').value;
+                const priority = document.getElementById('filterPriority').value;
+                const budget = document.getElementById('filterBudget').value;
+                const destination = document.getElementById('filterDestination').value;
+                
+                if (status) params.append('status', status);
+                if (priority) params.append('priority', priority);
+                if (budget) params.append('budget', budget);
+                if (destination) params.append('destination', destination);
+                
+                params.append('limit', '100');
+                params.append('sortBy', 'createdAt');
+                params.append('sortOrder', 'desc');
+                
+                const response = await fetch(`${API_BASE_URL}/leads?${params.toString()}`);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    currentLeads = result.data || [];
+                    displayLeads(currentLeads);
+                    updateLeadCount(currentLeads.length);
+                } else {
+                    throw new Error(result.error?.message || 'Failed to load leads');
+                }
+                
+            } catch (error) {
+                console.error('Failed to load leads:', error);
+                showError(`Failed to load leads: ${error.message}`);
+                displayLeads([]);
+            }
+            
+            showLoading(false);
+        }
+        
+        // Load statistics
+        async function loadStats() {
+            try {
+                const response = await fetch(`${API_BASE_URL}/leads/stats`);
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    if (result.success) {
+                        updateStats(result.stats);
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to load stats:', error);
+            }
+        }
+        
+        // Display leads in table
+        function displayLeads(leads) {
+            const tableContent = document.getElementById('tableContent');
+            const noData = document.getElementById('noData');
+            
+            if (leads.length === 0) {
+                tableContent.innerHTML = '';
+                tableContent.appendChild(noData);
+                return;
+            }
+            
+            const table = document.createElement('table');
+            table.innerHTML = `
+                <thead>
+                    <tr>
+                        <th>📧 Contact</th>
+                        <th>🎯 Destination</th>
+                        <th>💰 Budget</th>
+                        <th>👥 Group</th>
+                        <th>⭐ Priority</th>
+                        <th>📊 Status</th>
+                        <th>📅 Created</th>
+                        <th>🛠️ Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${leads.map(lead => `
+                        <tr class="priority-${lead.priority}">
+                            <td>
+                                <strong>${lead.name || 'Unknown'}</strong><br>
+                                <small>${lead.email}</small><br>
+                                ${lead.phone ? `<small>📞 ${lead.phone}</small>` : ''}
+                                ${lead.company ? `<br><small>🏢 ${lead.company}</small>` : ''}
+                            </td>
+                            <td>
+                                <strong>${lead.travelDetails.destination}</strong><br>
+                                <small>${lead.travelDetails.duration} days</small>
+                                ${lead.travelDetails.originCity ? `<br><small>From: ${lead.travelDetails.originCity}</small>` : ''}
+                            </td>
+                            <td>
+                                <span style="text-transform: capitalize; font-weight: bold;">${lead.travelDetails.budget}</span><br>
+                                ${lead.travelDetails.interests ? `<small>${lead.travelDetails.interests}</small>` : ''}
+                            </td>
+                            <td>
+                                <strong>${lead.travelDetails.groupSize}</strong> people<br>
+                                <small>${lead.travelDetails.travelStyle || 'Balanced'} style</small>
+                            </td>
+                            <td>
+                                <span style="text-transform: uppercase; font-weight: bold; color: ${getPriorityColor(lead.priority)}">
+                                    ${lead.priority}
+                                </span>
+                            </td>
+                            <td>
+                                <span class="status-badge status-${lead.status}">${lead.status}</span>
+                            </td>
+                            <td>
+                                <strong>${formatDate(lead.createdAt)}</strong><br>
+                                <small>${formatTime(lead.createdAt)}</small>
+                            </td>
+                            <td>
+                                <button class="btn btn-primary" style="padding: 5px 10px; font-size: 12px;" onclick="contactLead('${lead.id}', '${lead.email}')">
+                                    📞 Contact
+                                </button>
+                            </td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            `;
+            
+            tableContent.innerHTML = '';
+            tableContent.appendChild(table);
+        }
+        
+        // Export leads
+        async function exportLeads(format) {
+            try {
+                const params = new URLSearchParams();
+                
+                const status = document.getElementById('filterStatus').value;
+                const priority = document.getElementById('filterPriority').value;
+                const budget = document.getElementById('filterBudget').value;
+                const destination = document.getElementById('filterDestination').value;
+                
+                if (status) params.append('status', status);
+                if (priority) params.append('priority', priority);
+                if (budget) params.append('budget', budget);
+                if (destination) params.append('destination', destination);
+                
+                let url;
+                if (format === 'csv') {
+                    url = `${API_BASE_URL}/leads/export/csv?${params.toString()}`;
+                } else {
+                    url = `${API_BASE_URL}/leads/export?format=json&${params.toString()}`;
+                }
+                
+                const response = await fetch(url);
+                
+                if (!response.ok) {
+                    throw new Error('Export failed');
+                }
+                
+                if (format === 'csv') {
+                    const blob = await response.blob();
+                    const downloadUrl = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = downloadUrl;
+                    a.download = `leads-export-${new Date().toISOString().split('T')[0]}.csv`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    window.URL.revokeObjectURL(downloadUrl);
+                } else {
+                    const data = await response.json();
+                    const jsonBlob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                    const downloadUrl = window.URL.createObjectURL(jsonBlob);
+                    const a = document.createElement('a');
+                    a.href = downloadUrl;
+                    a.download = `leads-export-${new Date().toISOString().split('T')[0]}.json`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    window.URL.revokeObjectURL(downloadUrl);
+                }
+                
+                alert(`✅ Export completed! File downloaded successfully.`);
+                
+            } catch (error) {
+                console.error('Export failed:', error);
+                alert(`❌ Export failed: ${error.message}`);
+            }
+        }
+        
+        // Contact lead (open email client)
+        function contactLead(leadId, email) {
+            const subject = encodeURIComponent('Travel Assistance - Your Recent Itinerary Request');
+            const body = encodeURIComponent(`Hi there!\n\nI saw that you recently used our AI Travel Planner to create an itinerary. I'd love to help you with any additional travel planning needs.\n\nWould you be interested in discussing:\n- Personalized recommendations\n- Group travel coordination\n- Exclusive deals and packages\n- 24/7 travel support\n\nBest regards,\nTravel Planning Team`);
+            
+            window.open(`mailto:${email}?subject=${subject}&body=${body}`);
+        }
+        
+        // Update statistics display
+        function updateStats(stats) {
+            document.getElementById('totalLeads').textContent = stats.total || 0;
+            document.getElementById('newLeads').textContent = stats.byStatus?.new || 0;
+            document.getElementById('highPriorityLeads').textContent = stats.byPriority?.high || 0;
+            document.getElementById('recentLeads').textContent = stats.recent || 0;
+        }
+        
+        // Utility functions
+        function updateLeadCount(count) {
+            document.getElementById('leadCount').textContent = `${count} lead${count !== 1 ? 's' : ''}`;
+        }
+        
+        function showLoading(show) {
+            document.getElementById('loading').style.display = show ? 'block' : 'none';
+        }
+        
+        function showError(message) {
+            const errorDiv = document.getElementById('error');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+        }
+        
+        function hideError() {
+            document.getElementById('error').style.display = 'none';
+        }
+        
+        function getPriorityColor(priority) {
+            switch (priority) {
+                case 'high': return '#e74c3c';
+                case 'medium': return '#f39c12';
+                case 'low': return '#27ae60';
+                default: return '#7f8c8d';
+            }
+        }
+        
+        function formatDate(dateString) {
+            return new Date(dateString).toLocaleDateString();
+        }
+        
+        function formatTime(dateString) {
+            return new Date(dateString).toLocaleTimeString();
+        }
+        
+        // Event listeners
+        document.addEventListener('DOMContentLoaded', function() {
+            // Load initial data
+            loadLeads();
+            loadStats();
+            
+            // Add filter event listeners
+            document.getElementById('filterStatus').addEventListener('change', loadLeads);
+            document.getElementById('filterPriority').addEventListener('change', loadLeads);
+            document.getElementById('filterBudget').addEventListener('change', loadLeads);
+            
+            // Add search delay for destination filter
+            let destinationTimeout;
+            document.getElementById('filterDestination').addEventListener('input', function() {
+                clearTimeout(destinationTimeout);
+                destinationTimeout = setTimeout(loadLeads, 500);
+            });
+        });
+    </script>
+</body>
+</html>

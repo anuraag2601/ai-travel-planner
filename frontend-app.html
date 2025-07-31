@@ -490,10 +490,49 @@
                     </div>
                 </div>
                 
+                <!-- Lead Capture Section -->
+                <div style="background: rgba(255, 255, 255, 0.1); padding: 25px; border-radius: 15px; margin: 25px 0; border: 2px solid rgba(255, 255, 255, 0.2);">
+                    <h3 style="margin-bottom: 15px; text-align: center; color: #fff;">📧 Get Your Personalized Itinerary</h3>
+                    <p style="text-align: center; margin-bottom: 20px; opacity: 0.9; font-size: 14px;">We'll email you the complete itinerary and travel recommendations</p>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="contactEmail">📧 Email Address *:</label>
+                            <input type="email" id="contactEmail" name="contactEmail" placeholder="your.email@example.com" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="contactName">👤 Full Name:</label>
+                            <input type="text" id="contactName" name="contactName" placeholder="Your Name">
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="contactPhone">📞 Phone Number:</label>
+                            <input type="tel" id="contactPhone" name="contactPhone" placeholder="+1 (555) 123-4567">
+                        </div>
+                        <div class="form-group">
+                            <label for="contactCompany">🏢 Company (Optional):</label>
+                            <input type="text" id="contactCompany" name="contactCompany" placeholder="Company Name">
+                        </div>
+                    </div>
+                    
+                    <div style="text-align: center; margin-top: 10px;">
+                        <label class="checkbox-label" style="font-size: 12px; opacity: 0.8;">
+                            <input type="checkbox" id="consentMarketing" name="consentMarketing">
+                            <span class="checkmark"></span>
+                            I'd like to receive travel tips and special offers via email
+                        </label>
+                    </div>
+                </div>
+
                 <div class="form-group" style="text-align: center; margin-top: 30px;">
                     <button type="submit" class="generate-btn">
                         🚀 Generate My AI Itinerary
                     </button>
+                    <p style="font-size: 12px; color: rgba(255,255,255,0.7); margin-top: 10px;">
+                        By clicking "Generate", you agree to receive your personalized itinerary via email
+                    </p>
                 </div>
             </form>
         </div>
@@ -587,6 +626,15 @@
             e.preventDefault();
             
             const formData = new FormData(e.target);
+            
+            // Validate required email field
+            const contactEmail = formData.get('contactEmail');
+            if (!contactEmail || !contactEmail.includes('@')) {
+                alert('📧 Please enter a valid email address to receive your itinerary');
+                document.getElementById('contactEmail').focus();
+                return;
+            }
+            
             const data = {
                 originCity: formData.get('originCity'),
                 destination: formData.get('destination'),
@@ -599,7 +647,13 @@
                 groupSize: parseInt(formData.get('groupSize')),
                 currency: formData.get('currency'),
                 includeFlights: document.getElementById('includeFlights').checked,
-                includeHotels: document.getElementById('includeHotels').checked
+                includeHotels: document.getElementById('includeHotels').checked,
+                // Lead capture data
+                contactEmail: contactEmail,
+                contactName: formData.get('contactName'),
+                contactPhone: formData.get('contactPhone'),
+                contactCompany: formData.get('contactCompany'),
+                consentMarketing: document.getElementById('consentMarketing').checked
             };
             
             // Show loading
@@ -609,6 +663,46 @@
             document.querySelector('.generate-btn').disabled = true;
             
             try {
+                // Step 1: Capture lead first
+                let leadCaptured = false;
+                try {
+                    const leadData = {
+                        email: data.contactEmail,
+                        name: data.contactName,
+                        phone: data.contactPhone,
+                        company: data.contactCompany,
+                        travelDetails: {
+                            destination: data.destination,
+                            originCity: data.originCity,
+                            departureDate: data.departureDate,
+                            returnDate: data.returnDate,
+                            duration: data.duration,
+                            budget: data.budget,
+                            groupSize: data.groupSize,
+                            interests: data.interests,
+                            travelStyle: data.travelStyle
+                        }
+                    };
+
+                    const leadResponse = await fetch(`${API_BASE_URL}/leads`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(leadData)
+                    });
+
+                    if (leadResponse.ok) {
+                        const leadResult = await leadResponse.json();
+                        leadCaptured = true;
+                        console.log('✅ Lead captured:', leadResult.isExisting ? 'Existing lead' : 'New lead');
+                    } else {
+                        console.warn('⚠️ Lead capture failed, continuing with itinerary generation');
+                    }
+                } catch (leadError) {
+                    console.warn('⚠️ Lead capture error:', leadError.message);
+                }
+
                 let flightData = null;
                 let hotelData = null;
                 
@@ -878,7 +972,9 @@
                         
                         <div style="margin-top: 30px; padding: 20px; background: #d5f4e6; border-radius: 10px; color: #27ae60;">
                             <strong>✅ Complete Travel Plan Generated!</strong><br>
-                            Your personalized travel plan with${flightData ? ' live flight data' : ''}${hotelData ? ' and hotel recommendations' : ''} is ready. Safe travels! 🧳
+                            Your personalized travel plan with${flightData ? ' live flight data' : ''}${hotelData ? ' and hotel recommendations' : ''} is ready. 
+                            ${leadCaptured ? '<br>📧 We\'ve also saved your details and will follow up with additional travel assistance!' : ''}<br>
+                            Safe travels! 🧳
                         </div>
                     `;
                     resultDiv.style.display = 'block';

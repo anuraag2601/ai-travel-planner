@@ -3,39 +3,23 @@ import cors from 'cors'
 import helmet from 'helmet'
 import compression from 'compression'
 import morgan from 'morgan'
-import { createServer } from 'http'
-import { Server as SocketServer } from 'socket.io'
 
 import { config } from '@/config/index.js'
 import { logger } from '@/utils/logger.js'
-import { errorHandler } from '@/middleware/errorHandler.js'
 import { rateLimiter } from '@/middleware/rateLimiter.js'
 import { authMiddleware } from '@/middleware/auth.js'
-import { requestLogger } from '@/middleware/requestLogger.js'
-import { corsOptions } from '@/config/cors.js'
 
 // Route imports
 import authRoutes from '@/routes/auth.js'
-import userRoutes from '@/routes/user.js'
 import searchRoutes from '@/routes/search.js'
-import itineraryRoutes from '@/routes/itinerary.js'
-import notificationRoutes from '@/routes/notification.js'
-import healthRoutes from '@/routes/health.js'
+import itineraryRoutes from '@/routes/itineraries.js'
+import leadRoutes from '@/routes/leads.js'
 
 // Service imports
 import { initializeFirebase } from '@/config/firebase.js'
-import { connectRedis } from '@/config/redis.js'
-import { setupWebSocketHandlers } from '@/services/websocket.js'
 
 // Initialize Express app
 const app = express()
-const httpServer = createServer(app)
-
-// Initialize Socket.IO
-const io = new SocketServer(httpServer, {
-  cors: corsOptions,
-  transports: ['websocket', 'polling']
-})
 
 // Security middleware
 app.use(helmet({
@@ -51,7 +35,12 @@ app.use(helmet({
 }))
 
 // CORS configuration
-app.use(cors(corsOptions))
+app.use(cors({
+  origin: ['http://localhost:3000', 'https://ai-travel-frontend-rdq67befza-uc.a.run.app'],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+}))
 
 // Compression middleware
 app.use(compression())
@@ -61,7 +50,6 @@ app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true, limit: '10mb' }))
 
 // Request logging
-app.use(requestLogger)
 app.use(morgan('combined', { 
   stream: { write: (message) => logger.info(message.trim()) }
 }))
@@ -69,20 +57,16 @@ app.use(morgan('combined', {
 // Rate limiting
 app.use(rateLimiter)
 
-// Health check route (no auth required)
-app.use('/api/v1/health', healthRoutes)
-
 // API routes
 const apiRouter = express.Router()
 
 // Public routes
 apiRouter.use('/auth', authRoutes)
+apiRouter.use('/leads', leadRoutes) // Lead capture should be public for forms
 
 // Protected routes
-apiRouter.use('/users', authMiddleware, userRoutes)
 apiRouter.use('/search', authMiddleware, searchRoutes)
 apiRouter.use('/itineraries', authMiddleware, itineraryRoutes)
-apiRouter.use('/notifications', authMiddleware, notificationRoutes)
 
 // Mount API router
 app.use('/api/v1', apiRouter)
@@ -101,12 +85,6 @@ app.get('/api/docs', (req, res) => {
         'POST /auth/refresh': 'Refresh access token',
         'POST /auth/logout': 'User logout',
       },
-      users: {
-        'GET /users/profile': 'Get user profile',
-        'PUT /users/profile': 'Update user profile',
-        'GET /users/preferences': 'Get user preferences',
-        'PUT /users/preferences': 'Update user preferences',
-      },
       search: {
         'POST /search/flights': 'Search flights',
         'POST /search/hotels': 'Search hotels',
@@ -121,11 +99,13 @@ app.get('/api/docs', (req, res) => {
         'DELETE /itineraries/:id': 'Delete itinerary',
         'POST /itineraries/:id/share': 'Share itinerary',
       },
-      notifications: {
-        'GET /notifications': 'Get notifications',
-        'PUT /notifications/:id/read': 'Mark notification as read',
-        'POST /notifications/alerts': 'Create price alert',
-        'POST /notifications/email': 'Send email notification',
+      leads: {
+        'POST /leads': 'Create new lead (capture form)',
+        'GET /leads': 'Get leads with filtering',
+        'GET /leads/:id': 'Get lead by ID',
+        'PUT /leads/:id': 'Update lead',
+        'GET /leads/export/csv': 'Export leads as CSV',
+        'GET /leads/stats/overview': 'Get lead statistics',
       }
     }
   })
